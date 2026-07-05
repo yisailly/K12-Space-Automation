@@ -4,7 +4,7 @@
 
 K12 Space Automation is a local K12 workspace automation console for mailbox pool management, email OTP flows, K12 workspace join/switch tasks, Sub2API imports, access-token checks/repairs, and account JSON export.
 
-This repository contains source code, documentation, configuration templates, and lock files only. It does not include real runtime configuration, tokens, cookies, mailbox refresh tokens, account JSON files, or task data by default. Do not commit real credentials or local runtime data, even when the repository is private.
+This repository contains source code, documentation, configuration templates, and lock files only. It does not include real runtime configuration, tokens, cookies, mailbox refresh tokens, account JSON files, or task data by default. Do not commit real credentials or local runtime data, regardless of repository visibility.
 
 ## Features
 
@@ -34,9 +34,159 @@ This repository contains source code, documentation, configuration templates, an
 
 ## Install and Run
 
-### 1. Prepare a Fresh Ubuntu/VPS Server
+This section is written for beginners using the public repository. The goal is to get the project running first. Use `local run` for trying or debugging on your own computer. Use `VPS deployment` for long-running online usage, then add PM2 and Nginx only if needed.
 
-The steps below target a fresh Ubuntu server. For local development, skip to “Local Development Mode”.
+### 1. Choose a Run Mode First
+
+| Scenario | Recommended command | URL |
+| --- | --- | --- |
+| Local trial or development | `npm run dev` | `http://127.0.0.1:5174/` |
+| Local normal run | `npm run build`, then `npm run start` | `http://127.0.0.1:8796/` |
+| VPS deployment | Verify with `npm run build` and `npm run start`, then use PM2 | `http://SERVER_IP:8796/` or a domain |
+
+Notes:
+
+- `npm run dev` starts both the API server and the Vite frontend server. Use it for development and debugging.
+- `npm run start` starts only the API server and serves the built `dist/` frontend. Use it for normal runs and deployments.
+- Run `npm run build` before normal or production usage.
+
+### 2. Requirements
+
+Prepare these first:
+
+- Node.js 20+, Node.js 22+ recommended.
+- npm 10+.
+- Git.
+- A modern browser, such as Chrome, Edge, Firefox, or Safari.
+
+Check versions:
+
+```bash
+node -v
+npm -v
+git --version
+```
+
+If `node`, `npm`, or `git` is missing, install it for your operating system first.
+
+### 3. Windows from Scratch
+
+#### 3.1 Install Node.js and Git
+
+Beginner-friendly GUI path:
+
+1. Open the Node.js download page: <https://nodejs.org/en/download>
+2. Download and install the LTS version.
+3. Open the Git download page: <https://git-scm.com/downloads/win>
+4. Download and install Git for Windows.
+5. Close the current terminal and open a new PowerShell window.
+
+If you already use `winget`, you can install them with:
+
+```powershell
+winget install OpenJS.NodeJS.LTS
+winget install Git.Git
+```
+
+Check versions:
+
+```powershell
+node -v
+npm -v
+git --version
+```
+
+#### 3.2 Clone and Install Dependencies
+
+```powershell
+cd $HOME\Desktop
+git clone https://github.com/BFanSYe/K12-Space-Automation.git
+cd K12-Space-Automation
+npm install
+```
+
+#### 3.3 Start the App
+
+Development mode:
+
+```powershell
+npm run dev
+```
+
+Open:
+
+```text
+http://127.0.0.1:5174/
+```
+
+Normal run:
+
+```powershell
+npm run build
+npm run start
+```
+
+Open:
+
+```text
+http://127.0.0.1:8796/
+```
+
+### 4. macOS from Scratch
+
+#### 4.1 Install Node.js and Git
+
+If Homebrew is already installed, use:
+
+```bash
+brew install node git
+```
+
+If you do not use Homebrew, use the GUI path:
+
+1. Open the Node.js download page: <https://nodejs.org/en/download>
+2. Download and install the LTS version.
+3. Git is usually installed with Xcode Command Line Tools. If `git --version` is missing, run `xcode-select --install`.
+
+Check versions:
+
+```bash
+node -v
+npm -v
+git --version
+```
+
+#### 4.2 Clone and Install Dependencies
+
+```bash
+cd ~/Desktop
+git clone https://github.com/BFanSYe/K12-Space-Automation.git
+cd K12-Space-Automation
+npm install
+```
+
+#### 4.3 Start the App
+
+Development mode:
+
+```bash
+npm run dev
+```
+
+Open `http://127.0.0.1:5174/`.
+
+Normal run:
+
+```bash
+npm run build
+npm run start
+```
+
+Open `http://127.0.0.1:8796/`.
+
+### 5. Ubuntu/Linux from Scratch
+
+This section works for both local Linux and Ubuntu VPS. If you are deploying on a VPS, SSH into the server first.
 
 Install basic tools:
 
@@ -45,87 +195,80 @@ sudo apt update
 sudo apt install -y git curl ca-certificates
 ```
 
-Install Node.js 22 and npm with the NodeSource Node.js 22.x APT repository. If your server already has Node.js 20+, you may only run the version checks:
+Install Node.js 22 and npm:
 
 ```bash
 curl -fsSL https://deb.nodesource.com/setup_22.x -o /tmp/nodesource_setup.sh
 sudo -E bash /tmp/nodesource_setup.sh
 sudo apt install -y nodejs
-
-node -v
-npm -v
 ```
 
-Requirements:
+Check versions:
 
-- `node -v` should be `v20.x` or newer, `v22.x` recommended.
-- `npm -v` should be `10.x` or newer.
+```bash
+node -v
+npm -v
+git --version
+```
 
-NodeSource reference: <https://github.com/nodesource/distributions/blob/master/DEV_README.md>.
-
-### 2. Clone the Repository
-
-This is a private repository. The server must have GitHub access to `BFanSYe/K12-Space-Automation` through an HTTPS token, GitHub CLI login, or an SSH key.
-
-HTTPS:
+Clone and install dependencies:
 
 ```bash
 mkdir -p ~/apps
 cd ~/apps
 git clone https://github.com/BFanSYe/K12-Space-Automation.git
 cd K12-Space-Automation
-```
-
-SSH:
-
-```bash
-mkdir -p ~/apps
-cd ~/apps
-git clone git@github.com:BFanSYe/K12-Space-Automation.git
-cd K12-Space-Automation
-```
-
-If `git clone` fails with a permission error, fix the GitHub credentials on the server. Do not write GitHub tokens into repository files.
-
-### 3. Install Dependencies and Build
-
-```bash
 npm install
-npm run build
 ```
 
-`npm run build` runs type checks and creates the `dist/` frontend bundle. Production mode requires this build; otherwise the web page may return 404.
-
-### 4. Foreground Smoke Test
+Development mode:
 
 ```bash
+npm run dev
+```
+
+Open `http://127.0.0.1:5174/` on local Linux.
+
+Normal run or VPS foreground smoke test:
+
+```bash
+npm run build
 npm run start
 ```
 
-A successful startup prints output similar to:
+Open:
 
-```text
-K12 console API listening: http://0.0.0.0:8796/
-```
+- Local Linux: `http://127.0.0.1:8796/`
+- VPS: `http://SERVER_IP:8796/`
 
-Default URLs:
-
-- On the server: `http://127.0.0.1:8796/`
-- From another machine: `http://SERVER_IP:8796/`
-
-In production mode, `npm run start` serves the built `dist/` frontend directly from the API server. Only port `8796` is needed by default. Port `5174` is for the Vite development server and usually should not be exposed in production.
-
-If the page is not reachable:
+If the VPS page is unreachable, check the service locally first:
 
 ```bash
 curl http://127.0.0.1:8796/api/health
-sudo ufw allow 8796/tcp
-sudo ufw status
 ```
 
-Also confirm that your cloud security group allows TCP `8796`.
+Then confirm that the cloud security group and system firewall allow TCP `8796`.
 
-### 5. Run in the Background with PM2
+### 6. First Configuration
+
+After opening the web console for the first time, go to Settings and fill in the local runtime configuration, such as proxy, workspace, Sub2API, OTP, and JSON output directory.
+
+Saved configuration creates local files:
+
+- `data/config.json`
+- `config.json`
+
+For standalone tools under `codex_register/`, copy the template only when needed:
+
+```bash
+cp codex_register/config.example.json codex_register/config.json
+```
+
+Do not commit real configuration or runtime data, including tokens, cookies, mailbox refresh tokens, account JSON files, `config.json`, `data/`, `json/`, or `pool_tokens.txt`.
+
+### 7. Optional: Keep a VPS Running with PM2
+
+Skip this section for temporary local usage. PM2 is recommended for long-running VPS deployments.
 
 Install PM2:
 
@@ -133,7 +276,7 @@ Install PM2:
 sudo npm install -g pm2
 ```
 
-Start the service from the project root:
+Start from the project root:
 
 ```bash
 cd ~/apps/K12-Space-Automation
@@ -158,7 +301,7 @@ pm2 startup
 
 `pm2 startup` prints a `sudo env ...` command. Copy and run that command once.
 
-Recommended update flow:
+After updating code:
 
 ```bash
 cd ~/apps/K12-Space-Automation
@@ -168,25 +311,36 @@ npm run build
 pm2 restart k12-space-automation
 ```
 
-To change the port, set `PORT` when starting the process:
+### 8. Optional: Ports, Firewall, and Domain Access
+
+Default ports:
+
+- `8796`: API server and production web page.
+- `5174`: Vite development web page, only used by `npm run dev`.
+
+Change the API port temporarily:
+
+```bash
+PORT=8899 npm run start
+```
+
+Change the API port with PM2:
 
 ```bash
 PORT=8899 pm2 start npm --name k12-space-automation -- run start
 ```
 
-### 6. Optional: Nginx Reverse Proxy
+Allow the port on Ubuntu firewall:
 
-Skip this section if `http://SERVER_IP:8796/` is enough. For domain-based access, proxy Nginx to local port `8796`.
+```bash
+sudo ufw allow 8796/tcp
+sudo ufw status
+```
 
-Install Nginx:
+For domain access, use Nginx to proxy to local port `8796`. Replace `example.com` with your domain:
 
 ```bash
 sudo apt install -y nginx
-```
-
-Create a site configuration. Replace `example.com` with your domain:
-
-```bash
 sudo tee /etc/nginx/sites-available/k12-space-automation >/dev/null <<'NGINX'
 server {
     listen 80;
@@ -210,56 +364,18 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-`http://example.com/` should now open the console. For HTTPS, add TLS with certbot or your existing certificates after the reverse proxy works.
+After HTTP works, add HTTPS with certbot or your existing certificate setup.
 
-### 7. Local Development Mode
+### 9. Startup Troubleshooting
 
-Development mode starts both the API server and the Vite frontend server:
-
-```bash
-npm run dev
-```
-
-Default URLs:
-
-- Web console: `http://127.0.0.1:5174/`
-- API server: `http://127.0.0.1:8796/`
-
-Vite proxies `/api` requests to `8796`. This mode is for development and debugging, not long-running VPS production deployments.
-
-Common scripts:
-
-```bash
-npm run server    # Start the local API server only
-npm run frontend  # Start the Vite web console only
-npm run build     # Type-check and build the frontend
-npm run preview   # Preview the built frontend
-npm run start     # Start the local API server and serve dist/
-```
-
-### 8. First Configuration and Troubleshooting
-
-After the first startup, open the web console and fill Settings for proxy, workspace, Sub2API, OTP, and JSON output. Saved runtime configuration is written to:
-
-- `data/config.json`
-- `config.json`
-
-For standalone tools under `codex_register/`, copy the template when needed:
-
-```bash
-cp codex_register/config.example.json codex_register/config.json
-```
-
-Do not commit real configuration or runtime data, including tokens, cookies, mailbox refresh tokens, account JSON files, `config.json`, `data/`, `json/`, or `pool_tokens.txt`.
-
-Common issues:
-
-- `npm: command not found`: Node.js/npm is not installed or not on `PATH`; rerun the Node.js installation steps and check `node -v`, `npm -v`.
-- `Cannot find module`: dependencies are incomplete; rerun `npm install` from the project root.
-- 404 or blank page: run `npm run build` before `npm run start` or restart PM2 after rebuilding.
-- Page unreachable: check `pm2 status`, `pm2 logs k12-space-automation`, `curl http://127.0.0.1:8796/api/health`, security groups, and firewall rules.
-- Port already in use: set another `PORT` or stop the process using `8796`.
-- PM2 cannot find local configuration: start PM2 from the project root, not another directory.
+- `git: command not found`: Git is not installed. Install Git and reopen the terminal.
+- `node` or `npm` is missing: Node.js is not installed, or the terminal was opened before installation finished. Reopen the terminal.
+- Windows PowerShell cannot run npm: reopen PowerShell first. If it still fails, use Command Prompt or Git Bash.
+- `npm install` fails: confirm `node -v` is 20 or newer, check your network, and retry.
+- Page unreachable: `npm run dev` uses `5174`; `npm run start` uses `8796`. Check that you are opening the correct port.
+- 404 or blank page: normal run mode requires `npm run build` first.
+- Port already in use: stop the old process or set another `PORT`.
+- Configuration files appear after saving Settings: this is expected. `config.json`, `data/`, `json/`, and `pool_tokens.txt` are ignored by `.gitignore`; do not commit real data.
 
 ## Configuration
 
@@ -329,7 +445,7 @@ Common fields:
 
 ## Sensitive File Boundary
 
-The following files or directories may contain passwords, API keys, mailbox refresh tokens, access tokens, cookies, OAuth data, mailbox pools, account JSON files, or task logs. They should not be committed, even to a private repository:
+The following files or directories may contain passwords, API keys, mailbox refresh tokens, access tokens, cookies, OAuth data, mailbox pools, account JSON files, or task logs. They should not be committed, regardless of repository visibility:
 
 ```text
 config.json

@@ -4,7 +4,7 @@
 
 K12 Space Automation 是一个本地运行的 K12 workspace 自动化控制台, 用于管理邮箱池, 邮箱验证码流程, K12 workspace 加入/切换, Sub2API 入库, access token 检查/修复, 以及账号 JSON 写出.
 
-本仓库只包含源码, 文档, 配置模板和锁文件. 默认不包含真实运行配置, token, cookie, mailbox refresh token, account JSON 或任务数据. 即使仓库保持私有, 也不要提交任何真实账号凭据或本地运行数据.
+本仓库只包含源码, 文档, 配置模板和锁文件. 默认不包含真实运行配置, token, cookie, mailbox refresh token, account JSON 或任务数据. 无论仓库是否公开, 都不要提交任何真实账号凭据或本地运行数据.
 
 ## 功能概览
 
@@ -34,98 +34,241 @@ K12 Space Automation 是一个本地运行的 K12 workspace 自动化控制台, 
 
 ## 安装启动
 
-### 1. Ubuntu/VPS 从零准备
+本节面向公开仓库的小白用户, 目标是先把项目跑起来. 如果你只是想在自己电脑上体验或调试, 走 `本机运行`. 如果你想长期在线使用, 走 `VPS 部署`, 跑通后再看 PM2 和 Nginx 可选章节.
 
-以下步骤默认面向一台全新的 Ubuntu 服务器. 如果你在本机开发, 可以跳到“本机开发模式”.
+### 1. 先选运行方式
 
-先登录服务器, 安装基础工具:
+| 场景 | 推荐方式 | 访问地址 |
+| --- | --- | --- |
+| 本机体验或开发调试 | `npm run dev` | `http://127.0.0.1:5174/` |
+| 本机普通运行 | `npm run build` 后 `npm run start` | `http://127.0.0.1:8796/` |
+| VPS 长期部署 | 先 `npm run build` 和 `npm run start` 验证, 再用 PM2 后台运行 | `http://服务器IP:8796/` 或域名 |
+
+说明:
+
+- `npm run dev` 会同时启动 API 服务和 Vite 前端服务, 适合调试.
+- `npm run start` 只启动 API 服务, 并直接托管 `dist/` 前端产物, 更适合普通运行或部署.
+- 生产/普通运行前必须先执行 `npm run build`.
+
+### 2. 环境要求
+
+你需要先准备:
+
+- Node.js 20+, 推荐 Node.js 22+.
+- npm 10+.
+- Git.
+- 一个现代浏览器, 例如 Chrome, Edge, Firefox 或 Safari.
+
+检查命令:
+
+```bash
+node -v
+npm -v
+git --version
+```
+
+如果 `node`, `npm` 或 `git` 提示找不到命令, 先按下面对应系统安装.
+
+### 3. Windows 从零运行
+
+#### 3.1 安装 Node.js 和 Git
+
+新手推荐图形安装:
+
+1. 打开 Node.js 下载页: <https://nodejs.org/en/download>
+2. 下载并安装 LTS 版本.
+3. 打开 Git 下载页: <https://git-scm.com/downloads/win>
+4. 下载并安装 Git for Windows.
+5. 安装完成后, 关闭当前终端, 重新打开 PowerShell.
+
+如果你熟悉 `winget`, 也可以用命令安装:
+
+```powershell
+winget install OpenJS.NodeJS.LTS
+winget install Git.Git
+```
+
+检查版本:
+
+```powershell
+node -v
+npm -v
+git --version
+```
+
+#### 3.2 下载项目并安装依赖
+
+```powershell
+cd $HOME\Desktop
+git clone https://github.com/BFanSYe/K12-Space-Automation.git
+cd K12-Space-Automation
+npm install
+```
+
+#### 3.3 启动方式
+
+开发调试:
+
+```powershell
+npm run dev
+```
+
+然后打开:
+
+```text
+http://127.0.0.1:5174/
+```
+
+普通运行:
+
+```powershell
+npm run build
+npm run start
+```
+
+然后打开:
+
+```text
+http://127.0.0.1:8796/
+```
+
+### 4. macOS 从零运行
+
+#### 4.1 安装 Node.js 和 Git
+
+如果你已经安装 Homebrew, 推荐:
+
+```bash
+brew install node git
+```
+
+如果没有 Homebrew, 可以使用图形安装:
+
+1. 打开 Node.js 下载页: <https://nodejs.org/en/download>
+2. 下载并安装 LTS 版本.
+3. Git 通常随 Xcode Command Line Tools 安装. 如果 `git --version` 不存在, 执行 `xcode-select --install`.
+
+检查版本:
+
+```bash
+node -v
+npm -v
+git --version
+```
+
+#### 4.2 下载项目并安装依赖
+
+```bash
+cd ~/Desktop
+git clone https://github.com/BFanSYe/K12-Space-Automation.git
+cd K12-Space-Automation
+npm install
+```
+
+#### 4.3 启动方式
+
+开发调试:
+
+```bash
+npm run dev
+```
+
+然后打开 `http://127.0.0.1:5174/`.
+
+普通运行:
+
+```bash
+npm run build
+npm run start
+```
+
+然后打开 `http://127.0.0.1:8796/`.
+
+### 5. Ubuntu/Linux 从零运行
+
+本节同时适用于本机 Linux 和 Ubuntu VPS. 如果是 VPS, 先 SSH 登录服务器.
+
+安装基础工具:
 
 ```bash
 sudo apt update
 sudo apt install -y git curl ca-certificates
 ```
 
-安装 Node.js 22 和 npm. 这里使用 NodeSource 的 Node.js 22.x APT 源, 如服务器已经安装 Node.js 20+ 可以只执行版本检查:
+安装 Node.js 22 和 npm:
 
 ```bash
 curl -fsSL https://deb.nodesource.com/setup_22.x -o /tmp/nodesource_setup.sh
 sudo -E bash /tmp/nodesource_setup.sh
 sudo apt install -y nodejs
-
-node -v
-npm -v
 ```
 
-版本要求:
+检查版本:
 
-- `node -v` 应为 `v20.x` 或更高, 推荐 `v22.x`.
-- `npm -v` 应为 `10.x` 或更高.
+```bash
+node -v
+npm -v
+git --version
+```
 
-NodeSource 安装脚本参考: <https://github.com/nodesource/distributions/blob/master/DEV_README.md>.
-
-### 2. 拉取项目代码
-
-本仓库是私有仓库, 服务器需要先具备访问 `BFanSYe/K12-Space-Automation` 的 GitHub 权限. 可以使用 GitHub HTTPS token, GitHub CLI 登录, 或 SSH key.
-
-HTTPS 方式:
+下载项目并安装依赖:
 
 ```bash
 mkdir -p ~/apps
 cd ~/apps
 git clone https://github.com/BFanSYe/K12-Space-Automation.git
 cd K12-Space-Automation
-```
-
-SSH 方式:
-
-```bash
-mkdir -p ~/apps
-cd ~/apps
-git clone git@github.com:BFanSYe/K12-Space-Automation.git
-cd K12-Space-Automation
-```
-
-如果 `git clone` 提示无权限, 先检查服务器上的 GitHub 凭据, 不要把 GitHub token 写进仓库文件.
-
-### 3. 安装依赖并构建
-
-```bash
 npm install
-npm run build
 ```
 
-`npm run build` 会执行类型检查并生成 `dist/` 前端产物. 生产模式必须先构建, 否则访问页面可能出现 404.
-
-### 4. 前台启动验证
+开发调试:
 
 ```bash
+npm run dev
+```
+
+本机打开 `http://127.0.0.1:5174/`.
+
+普通运行或 VPS 前台验证:
+
+```bash
+npm run build
 npm run start
 ```
 
-看到类似输出即表示 API 服务已启动:
+访问地址:
 
-```text
-K12 console API listening: http://0.0.0.0:8796/
-```
+- 本机 Linux: `http://127.0.0.1:8796/`
+- VPS: `http://服务器IP:8796/`
 
-默认访问地址:
-
-- 服务器本机: `http://127.0.0.1:8796/`
-- 其他电脑访问: `http://服务器IP:8796/`
-
-生产模式下, `npm run start` 会由 API 服务直接托管构建后的 `dist/`, 默认只需要开放 `8796` 端口. `5174` 是 Vite 开发服务端口, 生产部署通常不需要开放.
-
-如果浏览器无法访问:
+如果 VPS 访问不到, 先在服务器上检查服务是否正常:
 
 ```bash
 curl http://127.0.0.1:8796/api/health
-sudo ufw allow 8796/tcp
-sudo ufw status
 ```
 
-还需要确认云服务器控制台的安全组或防火墙已放行 TCP `8796`.
+然后确认云服务器安全组和系统防火墙已放行 TCP `8796`.
 
-### 5. 使用 PM2 后台常驻运行
+### 6. 第一次打开后怎么配置
+
+第一次打开 Web 控制台后, 进入 Settings 页面, 填写本地运行所需配置, 例如代理, workspace, Sub2API, 接码和 JSON 写出目录.
+
+保存后会在本地生成:
+
+- `data/config.json`
+- `config.json`
+
+如需使用 `codex_register/` 下的独立工具, 再复制模板:
+
+```bash
+cp codex_register/config.example.json codex_register/config.json
+```
+
+不要把真实配置提交到 Git, 包括 token, cookie, mailbox refresh token, account JSON, `config.json`, `data/`, `json/`, `pool_tokens.txt`.
+
+### 7. 可选: VPS 后台运行 PM2
+
+如果你只在本机临时使用, 可以跳过本节. VPS 长期运行推荐使用 PM2.
 
 安装 PM2:
 
@@ -133,14 +276,14 @@ sudo ufw status
 sudo npm install -g pm2
 ```
 
-在项目根目录启动服务:
+在项目根目录启动:
 
 ```bash
 cd ~/apps/K12-Space-Automation
 pm2 start npm --name k12-space-automation -- run start
 ```
 
-常用管理命令:
+常用命令:
 
 ```bash
 pm2 status
@@ -149,7 +292,7 @@ pm2 restart k12-space-automation
 pm2 stop k12-space-automation
 ```
 
-配置开机自启:
+开机自启:
 
 ```bash
 pm2 save
@@ -158,7 +301,7 @@ pm2 startup
 
 `pm2 startup` 会输出一条以 `sudo env ...` 开头的命令, 按输出复制执行一次即可.
 
-更新代码后的推荐流程:
+更新代码后:
 
 ```bash
 cd ~/apps/K12-Space-Automation
@@ -168,25 +311,36 @@ npm run build
 pm2 restart k12-space-automation
 ```
 
-如需改端口, 可以在启动时设置 `PORT`:
+### 8. 可选: 端口, 防火墙和域名访问
+
+默认端口:
+
+- `8796`: API 服务和生产页面.
+- `5174`: Vite 开发页面, 只用于 `npm run dev`.
+
+如需临时改 API 端口:
+
+```bash
+PORT=8899 npm run start
+```
+
+PM2 中改端口:
 
 ```bash
 PORT=8899 pm2 start npm --name k12-space-automation -- run start
 ```
 
-### 6. 可选: Nginx 域名反向代理
+Ubuntu 防火墙放行端口:
 
-如果只通过 `http://服务器IP:8796/` 使用, 可以跳过本节. 如果需要域名访问, 可以用 Nginx 反代到本地 `8796`.
+```bash
+sudo ufw allow 8796/tcp
+sudo ufw status
+```
 
-安装 Nginx:
+如果需要域名访问, 可以用 Nginx 反向代理到本地 `8796`. 将 `example.com` 替换为你的域名:
 
 ```bash
 sudo apt install -y nginx
-```
-
-创建站点配置, 将 `example.com` 替换为你的域名:
-
-```bash
 sudo tee /etc/nginx/sites-available/k12-space-automation >/dev/null <<'NGINX'
 server {
     listen 80;
@@ -210,56 +364,18 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-此时访问 `http://example.com/` 应能打开控制台. 如需 HTTPS, 可以在 Nginx 配置完成后使用 certbot 或已有证书补齐 TLS.
+确认 HTTP 可访问后, 再按自己的证书方案或 certbot 配置 HTTPS.
 
-### 7. 本机开发模式
+### 9. 常见启动问题
 
-开发模式会同时启动 API 服务和 Vite 前端服务:
-
-```bash
-npm run dev
-```
-
-默认地址:
-
-- Web 控制台: `http://127.0.0.1:5174/`
-- API 服务: `http://127.0.0.1:8796/`
-
-Vite 会把 `/api` 请求代理到 `8796`. 该模式适合开发调试, 不建议作为 VPS 长期生产部署方式.
-
-常用脚本:
-
-```bash
-npm run server    # 只启动本地 API 服务
-npm run frontend  # 只启动 Vite Web 控制台
-npm run build     # 类型检查并构建前端产物
-npm run preview   # 预览构建产物
-npm run start     # 启动本地 API 服务并托管 dist/
-```
-
-### 8. 首次配置与部署常见问题
-
-第一次启动后, 打开 Web 控制台, 在 Settings 中填写代理, workspace, Sub2API, 接码和 JSON 写出配置. 保存后会生成本地运行配置:
-
-- `data/config.json`
-- `config.json`
-
-如需使用 `codex_register/` 下的独立工具, 再复制模板:
-
-```bash
-cp codex_register/config.example.json codex_register/config.json
-```
-
-不要把真实配置提交到 Git, 包括 token, cookie, mailbox refresh token, account JSON, `config.json`, `data/`, `json/`, `pool_tokens.txt`.
-
-常见问题:
-
-- `npm: command not found`: Node.js/npm 没装好, 重新执行 Node.js 安装步骤并确认 `node -v`, `npm -v`.
-- `Cannot find module`: 依赖不完整, 在项目根目录重新执行 `npm install`.
-- 页面 404 或空白: 生产模式下先执行 `npm run build`, 再 `npm run start` 或重启 PM2.
-- 访问不到页面: 检查 `pm2 status`, `pm2 logs k12-space-automation`, `curl http://127.0.0.1:8796/api/health`, 安全组和防火墙.
-- 端口占用: 换 `PORT`, 或停止占用 `8796` 的进程.
-- PM2 启动后找不到配置: 确认是在项目根目录执行 `pm2 start`, 不要从其他目录启动.
+- `git: command not found`: 没安装 Git, 先安装 Git 后重新打开终端.
+- `node` 或 `npm` 找不到: 没安装 Node.js, 或安装后没有重新打开终端.
+- Windows PowerShell 无法执行 npm: 先重开 PowerShell. 如果仍失败, 换 Command Prompt 或 Git Bash 执行同样命令.
+- `npm install` 失败: 先确认 `node -v` 是 20 或更高, 再检查网络后重试.
+- 页面打不开: `npm run dev` 对应 `5174`, `npm run start` 对应 `8796`, 先确认你访问的是正确端口.
+- 页面 404 或空白: 普通运行模式需要先执行 `npm run build`.
+- 端口占用: 停掉旧进程, 或设置 `PORT` 换端口.
+- Settings 保存后出现配置文件: 这是正常行为. `config.json`, `data/`, `json/`, `pool_tokens.txt` 已被 `.gitignore` 忽略, 不要提交真实数据.
 
 ## 基础配置
 
@@ -329,7 +445,7 @@ cp codex_register/config.example.json codex_register/config.json
 
 ## 敏感文件边界
 
-以下文件或目录可能包含密码, API Key, mailbox refresh token, access token, cookie, OAuth 数据, 邮箱池, 账号 JSON 或任务日志. 默认不应提交, 私有仓库也不例外:
+以下文件或目录可能包含密码, API Key, mailbox refresh token, access token, cookie, OAuth 数据, 邮箱池, 账号 JSON 或任务日志. 无论仓库是否公开都不应提交:
 
 ```text
 config.json
