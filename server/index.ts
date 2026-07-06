@@ -267,6 +267,9 @@ const sentinelSdkFile = path.join(rootDir, "sdk.js");
 const WORKSPACE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const WORKSPACE_ID_PATTERN_GLOBAL = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/ig;
 const MAX_INVALID_AUTH_WORKSPACE_IDS = 50;
+const SERVER_STARTED_AT_MS = Date.now();
+const SERVER_SOURCE_STALE_GRACE_MS = 1000;
+const ZEPHYR_MAIL_HOST = "mail.zephyr.baby";
 
 let appConfig: AppConfig;
 let emails: EmailRecord[] = [];
@@ -1668,7 +1671,7 @@ function maskMailboxUrl(value: string): string {
   try {
     const url = new URL(value);
     for (const key of [...url.searchParams.keys()]) {
-      if (/token|password|secret|key|client/i.test(key)) {
+      if (/token|password|secret|key|client|code|activation|mail_id|mailId/i.test(key)) {
         url.searchParams.set(key, maskSecret(url.searchParams.get(key) || "", 8, 6));
       }
     }
@@ -1683,6 +1686,51 @@ function appendLog(task: K12Task, level: LogLevel, message: string): void {
   if (task.logs.length > 500) task.logs.splice(0, task.logs.length - 500);
   task.updatedAt = nowIso();
   void persistTasks();
+}
+
+function mailboxProviderInfo(mailboxUrl: string): {provider: string; apiMode: string; zephyrSwitchedToCheckMail: boolean} {
+  try {
+    const url = new URL(mailboxUrl);
+    if (url.hostname.toLowerCase() !== ZEPHYR_MAIL_HOST) {
+      return {provider: "generic", apiMode: "direct-url", zephyrSwitchedToCheckMail: false};
+    }
+    if (url.pathname === "/api/check-mail") {
+      return {provider: "zephyr", apiMode: "check-mail", zephyrSwitchedToCheckMail: false};
+    }
+    const hasActivationCode = Boolean(url.searchParams.get("code") || url.searchParams.get("activation_code"));
+    const hasMailId = Boolean(url.searchParams.get("mail_id") || url.searchParams.get("mailId"));
+    return {
+      provider: "zephyr",
+      apiMode: hasActivationCode && hasMailId ? "check-mail" : "ui-url",
+      zephyrSwitchedToCheckMail: hasActivationCode && hasMailId,
+    };
+  } catch {
+    return {provider: "generic", apiMode: "direct-url", zephyrSwitchedToCheckMail: false};
+  }
+}
+
+async function warnIfSourceNewerThanServerStart(task: K12Task): Promise<void> {
+  const sourcePaths = [
+    __filename,
+    path.join(rootDir, "codex_register", "src", "mailbox-url.ts"),
+  ];
+  const staleSources: string[] = [];
+  for (const sourcePath of sourcePaths) {
+    try {
+      const info = await stat(sourcePath);
+      if (info.mtimeMs > SERVER_STARTED_AT_MS + SERVER_SOURCE_STALE_GRACE_MS) {
+        staleSources.push(path.relative(rootDir, sourcePath));
+      }
+    } catch {
+      // Missing source files are not expected in normal tsx runs, but should not block tasks.
+    }
+  }
+  if (!staleSources.length) return;
+  appendLog(
+    task,
+    "warn",
+    `检测到源码晚于当前 server 进程启动时间，请重启服务以加载最新修复: ${staleSources.join(", ")}`,
+  );
 }
 
 async function waitForManualEmailOtp(task: K12Task, email: EmailRecord, label: string): Promise<string> {
@@ -5471,6 +5519,7 @@ async function getAuthSessionCandidates(client: any): Promise<Record<string, unk
 }
 
 async function createOpenAIClientForEmail(task: K12Task, email: EmailRecord): Promise<any> {
+  await warnIfSourceNewerThanServerStart(task);
   await ensureSentinelSdk();
   const {OpenAIClient, generateRandomDeviceProfile, MailboxUrlCodeProvider} = await loadBundleModules();
   let baseline: unknown = null;
@@ -5486,6 +5535,11 @@ async function createOpenAIClientForEmail(task: K12Task, email: EmailRecord): Pr
     appendLog(task, "info", `当前邮箱为 Emailnator Gmail 动态接码模式: ${email.email}`);
     fetchOtp = (label: string) => waitForEmailnatorCode(email, task, label);
   } else {
+    const providerInfo = mailboxProviderInfo(email.mailboxUrl);
+    appendLog(task, "info", `邮箱接码 provider=${providerInfo.provider} api-mode=${providerInfo.apiMode}`);
+    if (providerInfo.zephyrSwitchedToCheckMail) {
+      appendLog(task, "ok", "Zephyr 邮箱链接已切换到 /api/check-mail");
+    }
     const mailboxProvider = new MailboxUrlCodeProvider(email.mailboxUrl);
     let baselineError = "";
     for (let attempt = 1; attempt <= 3; attempt += 1) {
