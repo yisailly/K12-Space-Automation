@@ -543,6 +543,11 @@ git ls-files | rg '(^|/)(data|json|auth|pool_tokens|config\.json|k12-basic-auth|
 
 `npm run build` 和 `npx tsc` 应成功. 敏感文件检查命令应没有输出.
 
+## 致谢
+
+[LINUX DO](https://linux.do) — 社区交流与支持
+[lxh77721/k12-reg](https://github.com/lxh77721/k12-reg) — 注册机原仓库
+
 ## License
 
 This project is licensed under the MIT License. See `LICENSE`.
