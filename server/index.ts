@@ -3600,21 +3600,6 @@ async function restoreChatGptCurrentAccountToLoginBase(
   return restoredToken;
 }
 
-async function assertNoRtWorkspaceTokenAliveAfterBaseRestore(
-  task: K12Task,
-  workspaceId: string,
-  accessToken: string,
-): Promise<void> {
-  if (!isAccessTokenForWorkspace(accessToken, workspaceId)) {
-    throw new Error(`noRT workspace AT 不匹配，已阻止写入: expected=${workspaceId}, ${describeAccessTokenContext(accessToken)}`);
-  }
-  appendLog(task, "info", `noRT AT 恢复个人/free 后测活: ${workspaceId.slice(0, 8)}...`);
-  const result = await testOpenAiAccessToken(accessToken);
-  if (!result.ok) {
-    throw new Error(`noRT AT 恢复个人/free 后测活失败，已阻止写入 Sub2API/JSON: ${workspaceId.slice(0, 8)}... ${result.message}`);
-  }
-  appendLog(task, "ok", `noRT AT 恢复个人/free 后测活通过: ${workspaceId.slice(0, 8)}... ${result.message}`);
-}
 
 function findWorkspaceInAccountsCheck(payload: unknown, workspaceId: string): Record<string, unknown> | null {
   if (!payload || typeof payload !== "object") return null;
@@ -6188,17 +6173,12 @@ async function runNoRtWorkspaceBatchTwoPhase(
     await checkK12WorkspaceMembership(client, task, baseAccessToken, workspaceId, email);
     const workspaceToken = await exchangeChatGptWorkspaceSessionToken(client, task, workspaceId);
     collected.push({workspaceId, accessToken: workspaceToken});
-    appendLog(task, "ok", `workspace AT 已暂存，等待批量结束后统一恢复和测活: ${workspaceId.slice(0, 8)}...`);
+    appendLog(task, "ok", `workspace AT 已暂存，等待批量结束后统一恢复再写入: ${workspaceId.slice(0, 8)}...`);
   }
   appendLog(task, "ok", `K12 token exchange 阶段完成: ${collected.length}/${workspaceIds.length}`);
 
   await restoreChatGptCurrentAccountToLoginBase(client, task, email, baseAccessToken, "批量 exchange 完成后唯一恢复");
-  appendLog(task, "info", `Sub2API noRT 批处理模式：阶段 2.5 恢复个人/free 后最终测活 ${collected.length} 个 workspace AT`);
-  for (let itemIndex = 0; itemIndex < collected.length; itemIndex += 1) {
-    assertNotCanceled(task);
-    const item = collected[itemIndex];
-    await assertNoRtWorkspaceTokenAliveAfterBaseRestore(task, item.workspaceId, item.accessToken);
-  }
+  appendLog(task, "info", `Sub2API noRT 批处理模式：已按要求跳过入库前自动测活 ${collected.length} 个 workspace AT`);
 
   appendLog(task, "info", `Sub2API noRT 批处理模式：阶段 3 统一 upsert 并覆盖写出 JSON ${collected.length} 个 workspace`);
   for (let itemIndex = 0; itemIndex < collected.length; itemIndex += 1) {
@@ -6408,14 +6388,10 @@ async function runTask(task: K12Task): Promise<void> {
           appendLog(task, "info", `开始导出 workspace ${workspaceIndex + 1}/${workspaceIds.length}: ${workspaceId}`);
           const workspaceToken = await runK12WorkspaceJoinAndExchangeForWorkspace(client, task, email, baseAccessToken, workspaceId);
           collected.push({workspaceId, accessToken: workspaceToken});
-          appendLog(task, "ok", `workspace AT 已暂存，等待批量结束后统一恢复和测活: ${workspaceId.slice(0, 8)}...`);
+          appendLog(task, "ok", `workspace AT 已暂存，等待批量结束后统一恢复再写入: ${workspaceId.slice(0, 8)}...`);
         }
         await restoreChatGptCurrentAccountToLoginBase(client, task, email, baseAccessToken, "JSON-only 批量 exchange 完成后唯一恢复");
-        appendLog(task, "info", `JSON-only 批处理模式：恢复个人/free 后最终测活 ${collected.length} 个 workspace AT`);
-        for (const item of collected) {
-          assertNotCanceled(task);
-          await assertNoRtWorkspaceTokenAliveAfterBaseRestore(task, item.workspaceId, item.accessToken);
-        }
+        appendLog(task, "info", `JSON-only 批处理模式：已按要求跳过写出前自动测活 ${collected.length} 个 workspace AT`);
         for (const item of collected) {
           assertNotCanceled(task);
           recordAccessToken(task, email, item.accessToken);
