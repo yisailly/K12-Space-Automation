@@ -3577,6 +3577,19 @@ async function restoreChatGptCurrentAccountToLoginBase(
   reason: string,
 ): Promise<string> {
   const baseWorkspaceId = resolveLoginBaseWorkspaceId(task, email, baseAccessToken);
+
+  try {
+    const currentToken = String(await client.getChatGPTAccessToken());
+    const currentAccountId = normalizeWorkspaceId(summarizeToken(currentToken).accountId);
+    if (sameWorkspaceId(currentAccountId, baseWorkspaceId) && isLoginBaseAccessToken(task, currentToken)) {
+      await cacheLoginBaseWorkspaceFromAccessToken(email, task, currentToken);
+      appendLog(task, "ok", `当前已在个人/free，无需重复切换 (${reason}): ${baseWorkspaceId.slice(0, 8)}...`);
+      return currentToken;
+    }
+  } catch (error) {
+    appendLog(task, "warn", `读取当前 ChatGPT session 失败，将直接恢复个人/free: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
   appendLog(task, "info", `恢复 ChatGPT 当前账户到个人/free (${reason}): ${baseWorkspaceId.slice(0, 8)}...`);
   const restoredToken = await exchangeChatGptSessionTokenForAccount(client, task, baseWorkspaceId, "个人/free AT");
   if (!isLoginBaseAccessToken(task, restoredToken)) {
@@ -6154,7 +6167,7 @@ async function runNoRtWorkspaceBatchTwoPhase(
   }
 
   appendLog(task, "info", "noRT workspace token 模式: chatgpt session exchange, 禁用 auth callback workspace 切换");
-  appendLog(task, "info", "noRT 安全策略: 导出后恢复个人/free, 禁止 logout");
+  appendLog(task, "info", "noRT 安全策略: 批内连续 exchange，结束仅恢复个人/free 一次，禁止 logout");
   appendLog(task, "info", `Sub2API noRT 批处理模式：阶段 1 集中申请 ${workspaceIds.length} 个 workspace`);
   await refreshVisibleWorkspacesFromAccountsCheck(client, task, email, baseAccessToken, "K12 申请阶段开始");
   for (let workspaceIndex = 0; workspaceIndex < workspaceIds.length; workspaceIndex += 1) {
@@ -6166,20 +6179,20 @@ async function runNoRtWorkspaceBatchTwoPhase(
   appendLog(task, "ok", `K12 申请阶段完成: ${workspaceIds.length}/${workspaceIds.length}`);
 
   const collected: {workspaceId: string; accessToken: string}[] = [];
-  appendLog(task, "info", `Sub2API noRT 批处理模式：阶段 2 使用 session exchange 获取 ${workspaceIds.length} 个 workspace AT`);
+  appendLog(task, "info", `Sub2API noRT 批处理模式：阶段 2 连续 session exchange 获取 ${workspaceIds.length} 个 workspace AT`);
+  appendLog(task, "info", "阶段 2 不在每个 workspace 后切回个人/free，避免 K12/free 反复 setCurrentAccount 撤销旧 AT");
   for (let workspaceIndex = 0; workspaceIndex < workspaceIds.length; workspaceIndex += 1) {
     assertNotCanceled(task);
     const workspaceId = workspaceIds[workspaceIndex];
     appendLog(task, "info", `K12 token exchange 阶段: ${workspaceIndex + 1}/${workspaceIds.length} ${workspaceId}`);
     await checkK12WorkspaceMembership(client, task, baseAccessToken, workspaceId, email);
     const workspaceToken = await exchangeChatGptWorkspaceSessionToken(client, task, workspaceId);
-    await restoreChatGptCurrentAccountToLoginBase(client, task, email, baseAccessToken, `workspace ${workspaceIndex + 1}/${workspaceIds.length} 导出后`);
-    await assertNoRtWorkspaceTokenAliveAfterBaseRestore(task, workspaceId, workspaceToken);
     collected.push({workspaceId, accessToken: workspaceToken});
+    appendLog(task, "ok", `workspace AT 已暂存，等待批量结束后统一恢复和测活: ${workspaceId.slice(0, 8)}...`);
   }
   appendLog(task, "ok", `K12 token exchange 阶段完成: ${collected.length}/${workspaceIds.length}`);
 
-  await restoreChatGptCurrentAccountToLoginBase(client, task, email, baseAccessToken, "批量入库前最终确认");
+  await restoreChatGptCurrentAccountToLoginBase(client, task, email, baseAccessToken, "批量 exchange 完成后唯一恢复");
   appendLog(task, "info", `Sub2API noRT 批处理模式：阶段 2.5 恢复个人/free 后最终测活 ${collected.length} 个 workspace AT`);
   for (let itemIndex = 0; itemIndex < collected.length; itemIndex += 1) {
     assertNotCanceled(task);
@@ -6304,24 +6317,8 @@ async function runTask(task: K12Task): Promise<void> {
           baseAccessTokenForWorkspaceRestore = baseAccessToken;
           workspaceSessionRestoreRequired = true;
         }
-        if (workspaceIds.length > 1) {
+        if (workspaceIds.length) {
           accessToken = await runNoRtWorkspaceBatchTwoPhase(client, task, email, baseAccessToken, workspaceIds);
-        } else if (workspaceIds.length) {
-          appendLog(task, "info", "noRT workspace token 模式: chatgpt session exchange, 禁用 auth callback workspace 切换");
-          appendLog(task, "info", "noRT 安全策略: 导出后恢复个人/free, 禁止 logout");
-          appendLog(task, "info", `Sub2API noRT 批处理模式：一次登录后顺序处理 ${workspaceIds.length} 个 workspace`);
-          for (let workspaceIndex = 0; workspaceIndex < workspaceIds.length; workspaceIndex += 1) {
-            assertNotCanceled(task);
-            const workspaceId = workspaceIds[workspaceIndex];
-            appendLog(task, "info", `开始 workspace ${workspaceIndex + 1}/${workspaceIds.length}: ${workspaceId}`);
-            const workspaceToken = await runK12WorkspaceJoinAndExchangeForWorkspace(client, task, email, baseAccessToken, workspaceId);
-            await restoreChatGptCurrentAccountToLoginBase(client, task, email, baseAccessToken, `workspace ${workspaceIndex + 1}/${workspaceIds.length} 导出后`);
-            await assertNoRtWorkspaceTokenAliveAfterBaseRestore(task, workspaceId, workspaceToken);
-            recordAccessToken(task, email, workspaceToken);
-            await appendTokenOut(workspaceToken);
-            await upsertAndExportNoRtWorkspaceToken(task, email, workspaceToken, "gpt-k12-nort-session-exchange");
-            accessToken = workspaceToken;
-          }
         } else {
           appendLog(task, "info", "Sub2API noRT 模式已开启：跳过 OAuth，用当前 AT 入库");
           accessToken = await ensureK12AccessTokenForNoRt(client, task, accessToken);
@@ -6402,19 +6399,29 @@ async function runTask(task: K12Task): Promise<void> {
         baseAccessTokenForWorkspaceRestore = baseAccessToken;
         workspaceSessionRestoreRequired = true;
         appendLog(task, "info", "JSON-only workspace token 模式: chatgpt session exchange, 禁用 auth callback workspace 切换");
-        appendLog(task, "info", "noRT 安全策略: 导出后恢复个人/free, 禁止 logout");
-        appendLog(task, "info", `JSON-only 批处理模式：一次登录后顺序导出 ${workspaceIds.length} 个 workspace`);
+        appendLog(task, "info", "JSON-only 安全策略: 批内连续 exchange，结束仅恢复个人/free 一次，禁止 logout");
+        appendLog(task, "info", `JSON-only 批处理模式：连续导出 ${workspaceIds.length} 个 workspace AT，统一恢复后再写 JSON`);
+        const collected: {workspaceId: string; accessToken: string}[] = [];
         for (let workspaceIndex = 0; workspaceIndex < workspaceIds.length; workspaceIndex += 1) {
           assertNotCanceled(task);
           const workspaceId = workspaceIds[workspaceIndex];
           appendLog(task, "info", `开始导出 workspace ${workspaceIndex + 1}/${workspaceIds.length}: ${workspaceId}`);
           const workspaceToken = await runK12WorkspaceJoinAndExchangeForWorkspace(client, task, email, baseAccessToken, workspaceId);
-          await restoreChatGptCurrentAccountToLoginBase(client, task, email, baseAccessToken, `JSON-only workspace ${workspaceIndex + 1}/${workspaceIds.length} 导出后`);
-          await assertNoRtWorkspaceTokenAliveAfterBaseRestore(task, workspaceId, workspaceToken);
-          recordAccessToken(task, email, workspaceToken);
-          await appendTokenOut(workspaceToken);
-          await exportJsonOnlyWorkspaceToken(task, email, workspaceToken, workspaceId);
-          accessToken = workspaceToken;
+          collected.push({workspaceId, accessToken: workspaceToken});
+          appendLog(task, "ok", `workspace AT 已暂存，等待批量结束后统一恢复和测活: ${workspaceId.slice(0, 8)}...`);
+        }
+        await restoreChatGptCurrentAccountToLoginBase(client, task, email, baseAccessToken, "JSON-only 批量 exchange 完成后唯一恢复");
+        appendLog(task, "info", `JSON-only 批处理模式：恢复个人/free 后最终测活 ${collected.length} 个 workspace AT`);
+        for (const item of collected) {
+          assertNotCanceled(task);
+          await assertNoRtWorkspaceTokenAliveAfterBaseRestore(task, item.workspaceId, item.accessToken);
+        }
+        for (const item of collected) {
+          assertNotCanceled(task);
+          recordAccessToken(task, email, item.accessToken);
+          await appendTokenOut(item.accessToken);
+          await exportJsonOnlyWorkspaceToken(task, email, item.accessToken, item.workspaceId);
+          accessToken = item.accessToken;
         }
         jsonOnlyBatchExported = true;
       }
