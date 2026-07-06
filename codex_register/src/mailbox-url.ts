@@ -1,6 +1,28 @@
 import {createHash} from "node:crypto";
 
 const CODE_PATTERN = /\b\d{6}\b/;
+const ZEPHYR_MAIL_HOST = "mail.zephyr.baby";
+
+const CURRENT_CODE_KEYS = [
+    "mail_code",
+    "mailCode",
+    "latest_code",
+    "latestCode",
+    "current_code",
+    "currentCode",
+    "last_code",
+    "lastCode",
+];
+
+const CODE_ARRAY_KEYS = [
+    "mail_codes",
+    "mailCodes",
+    "codes",
+    "otp_codes",
+    "otpCodes",
+    "verification_codes",
+    "verificationCodes",
+];
 
 export interface MailboxSnapshot {
     hash: string;
@@ -45,6 +67,15 @@ function normalizeSixDigitCode(value: string | undefined): string {
     return digitsOnly.length === 6 ? digitsOnly : "";
 }
 
+function findLatestCodeInArray(value: unknown): string {
+    if (!Array.isArray(value)) return "";
+    for (let index = value.length - 1; index >= 0; index -= 1) {
+        const code = findCodeInJson(value[index]);
+        if (code) return code;
+    }
+    return "";
+}
+
 function findCodeInJson(value: unknown): string {
     if (Array.isArray(value)) {
         for (const item of value) {
@@ -66,6 +97,16 @@ function findCodeInJson(value: unknown): string {
             }
             return "";
         };
+
+        for (const key of CURRENT_CODE_KEYS) {
+            const code = normalizeCode(record[key]);
+            if (code) return code;
+        }
+
+        for (const key of CODE_ARRAY_KEYS) {
+            const code = findLatestCodeInArray(record[key]);
+            if (code) return code;
+        }
 
         for (const key of ["code", "otp", "verification_code", "verificationCode", "passcode"]) {
             const code = normalizeCode(record[key]);
@@ -219,22 +260,49 @@ async function sleep(ms: number): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function resolveMailboxFetchUrl(mailboxUrl: string): string {
+    try {
+        const url = new URL(mailboxUrl);
+        if (url.hostname.toLowerCase() !== ZEPHYR_MAIL_HOST) return mailboxUrl;
+        if (url.pathname === "/api/check-mail") return url.toString();
+
+        const activationCode = url.searchParams.get("code") || url.searchParams.get("activation_code");
+        const mailId = url.searchParams.get("mail_id") || url.searchParams.get("mailId");
+        if (!activationCode || !mailId) return mailboxUrl;
+
+        const apiUrl = new URL("/api/check-mail", url.origin);
+        apiUrl.searchParams.set("mail_id", mailId);
+        apiUrl.searchParams.set("activation_code", activationCode);
+        return apiUrl.toString();
+    } catch {
+        return mailboxUrl;
+    }
+}
+
 export class MailboxUrlCodeProvider {
     readonly mailboxUrl: string;
+    private readonly fetchUrl: string;
 
     constructor(mailboxUrl: string) {
         this.mailboxUrl = mailboxUrl.trim();
         if (!this.mailboxUrl) {
             throw new Error("mailbox_url is empty");
         }
+        this.fetchUrl = resolveMailboxFetchUrl(this.mailboxUrl);
     }
 
     async fetchRaw(): Promise<string> {
-        const response = await fetch(this.mailboxUrl, {
+        const headers: Record<string, string> = {
+            Accept: "application/json,text/plain,*/*",
+            "User-Agent": "Mozilla/5.0 K12SpaceConsole/0.1",
+        };
+        if (this.fetchUrl !== this.mailboxUrl) {
+            headers.Referer = this.mailboxUrl;
+        }
+
+        const response = await fetch(this.fetchUrl, {
             method: "GET",
-            headers: {
-                Accept: "application/json,text/plain,*/*",
-            },
+            headers,
         });
         const raw = await response.text();
         if (!response.ok) {
