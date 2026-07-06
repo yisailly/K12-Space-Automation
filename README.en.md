@@ -2,19 +2,51 @@
 
 [中文](README.md) | English
 
-K12 Space Automation is a local K12 workspace automation console for mailbox pool management, email OTP flows, K12 workspace join/switch tasks, Sub2API imports, access-token checks/repairs, and account JSON export.
+K12 Space Automation is a local K12 workspace automation console. It brings mailbox pools, email OTP, K12 workspace join/switch flows, Sub2API imports, access-token liveness/repair, automatic refills, account JSON export, and task logs into one web console.
 
 This repository contains source code, documentation, configuration templates, and lock files only. It does not include real runtime configuration, tokens, cookies, mailbox refresh tokens, account JSON files, or task data by default. Do not commit real credentials or local runtime data, regardless of repository visibility.
 
 ## Features
 
-- Mailbox pool management: import, select, delete, status marking, and retry.
-- OTP handling: mailbox URL, manual OTP, SMSBower Gmail, and Emailnator Gmail.
-- K12 flow: login, join or switch K12 workspace, and read K12-context access tokens.
-- Sub2API: OAuth import, noRT import, account liveness check, and access-token repair.
-- JSON output: SUB2API and CPA account JSON formats.
-- Data migration: import/export local configuration, mailbox pool, tasks, and token data packages.
-- Task management: batch start, cancel, retry, clear failed tasks, pagination, status, and logs.
+- Mailbox pool management: batch import, automatic OTP, manual OTP, mailbox selection, batch deletion, status marking, plus-alias splitting, and failed-mailbox reuse control.
+- Dynamic Gmail OTP: SMSBower Gmail and Emailnator Gmail. SMSBower mode can show balance/local spend and supports service code, domain, max price, and Gmail fission child tasks.
+- K12 workspace flow: request/accept modes and sequential multi-workspace execution. One mailbox login can be reused to finish K12, Sub2API import, and JSON output for multiple workspaces.
+- Sub2API import: OAuth import and noRT import, with multi-group binding, proxy/IP management fields, account priority, and import concurrency.
+- Access-token maintenance: task-level and mailbox-level AT liveness checks, batch checks, inactive-task selection, AT copy, and repair-task creation after 401/inactive results.
+- Automatic refill: counts normal accounts in a target Sub2API group, creates refill tasks below a threshold, and supports manual trigger, scheduled checks, deep liveness checks, and refill history logs.
+- JSON output: SUB2API and CPA account JSON formats with configurable output directory. Account JSON can be written from task results even when Sub2API import is disabled.
+- Data migration: export/import local configuration, mailbox pool, tasks, and token bundles. Current data is backed up automatically before import.
+- Task management: batch start, cancel, delete, retry, clear failed tasks, pagination, log modal, rate-limit cooldown, and retry workflow after failures.
+
+## Core Capabilities
+
+### Mailbox Pool and OTP
+
+Mailboxes can come from a fixed mailbox pool or a dynamic Gmail provider. Fixed pools are useful when you already have mailbox resources. Dynamic Gmail is useful when you do not want to maintain a long-lived pool. Manual OTP mode only requires mailbox addresses; when a task waits for OTP, enter the six-digit code in the task log modal.
+
+### Multi-Workspace K12 Flow
+
+`workspaceIds` supports one workspace per line or comma-separated values. With multiple workspaces, the system reuses the same login context where possible, then runs join/switch, import, and JSON output sequentially instead of logging in separately for every workspace.
+
+### Sub2API and noRT
+
+The default mode uses Sub2API OAuth import. noRT mode skips the Sub2API OAuth chain; after registration/login and K12 context switching, it uses the K12-context AT to create or update noRT accounts. The group field supports multiple groups for publishing the same account to several Sub2API groups.
+
+### AT Liveness and Repair
+
+Both task lists and mailbox pools can run AT liveness checks. When an account is inactive or returns 401, repair tasks can re-login through email OTP and update the matching Sub2API account. If no matching Sub2API account exists, the repair flow can create one with the current configuration.
+
+### Automatic Refill
+
+Automatic refill periodically checks the normal account count in a target Sub2API group. When the count is below the configured threshold, the system creates refill tasks from free mailboxes. With deep liveness enabled, only accounts that pass a real request are counted as normal.
+
+### Dynamic Gmail and Fission
+
+SMSBower Gmail mode can rent Gmail mailboxes for OTP. After a parent Gmail task succeeds, it can create configured `+alias` child tasks. Child tasks run sequentially to reduce OTP cross-use risk. Emailnator mode supports plusGmail, googleMail, dotGmail, and domain generation types.
+
+### Data Backup and Task Recovery
+
+The console can export a local data bundle covering configuration, mailbox pool, tasks, and tokens. Before importing a bundle, current data is backed up to `data/backups/`. After server restarts, unfinished tasks are marked failed or kept queued, making retry and investigation easier.
 
 ## Architecture
 
@@ -435,13 +467,13 @@ Common fields:
 
 ## Task Flow
 
-1. Open the web console.
-2. Fill Settings and confirm proxy, workspace, Sub2API, and OTP settings.
-3. Import a mailbox pool or enable dynamic Gmail OTP.
-4. Configure task count, concurrency, K12 workspace flow, Sub2API/noRT, and JSON output.
-5. Start tasks and inspect status, logs, access-token summaries, and output paths.
-6. Retry failed tasks after reading logs, or lower concurrency before rerunning.
-7. Use data import/export for local state migration. Do not use Git for runtime data.
+1. Open the web console, then save proxy, workspace, Sub2API, OTP, and JSON output settings from Settings.
+2. Choose a mailbox source: import a fixed mailbox pool, use manual OTP, or enable SMSBower/Emailnator dynamic Gmail.
+3. Configure K12 workspace IDs, request/accept mode, concurrency, Sub2API import, noRT, and JSON output.
+4. If you need to maintain Sub2API group inventory, enable automatic refill and configure target group, threshold, refill count, and deep liveness.
+5. Start tasks and inspect status, K12 results, Sub2API accounts, AT summaries, JSON files, and logs in the task list.
+6. For failed or inactive accounts, run AT liveness checks first, then repair AT, retry tasks, clear failed tasks, or lower concurrency before rerunning.
+7. Use data export/import for local state migration or backup. Do not use Git for runtime data.
 
 ## Sensitive File Boundary
 

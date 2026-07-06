@@ -2,19 +2,51 @@
 
 中文 | [English](README.en.md)
 
-K12 Space Automation 是一个本地运行的 K12 workspace 自动化控制台, 用于管理邮箱池, 邮箱验证码流程, K12 workspace 加入/切换, Sub2API 入库, access token 检查/修复, 以及账号 JSON 写出.
+K12 Space Automation 是一个本地运行的 K12 workspace 自动化控制台. 它把邮箱池管理, 邮箱验证码, K12 workspace 加入/切换, Sub2API 入库, access token 测活/修复, 自动补号, 账号 JSON 写出和任务日志集中到一个 Web 控制台里.
 
 本仓库只包含源码, 文档, 配置模板和锁文件. 默认不包含真实运行配置, token, cookie, mailbox refresh token, account JSON 或任务数据. 无论仓库是否公开, 都不要提交任何真实账号凭据或本地运行数据.
 
 ## 功能概览
 
-- 邮箱池管理: 导入, 选择, 删除, 状态标记, 失败重试.
-- 邮箱接码: 支持普通接码 URL, 手动验证码, SMSBower Gmail, Emailnator Gmail.
-- K12 流程: 登录, 加入或切换 K12 workspace, 读取 K12 上下文 access token.
-- Sub2API: OAuth 入库, noRT 直入, 账号测活, access token 修复.
-- JSON 写出: 支持 SUB2API 和 CPA 两类账号 JSON 格式.
-- 数据迁移: 支持本地配置, 邮箱池, 任务和 token 数据包导入/导出.
-- 任务管理: 批量启动, 取消, 重试, 清理失败任务, 分页查看状态和日志.
+- 邮箱池管理: 支持批量导入, 自动接码, 手动接码, 选择任务邮箱, 批量删除, 状态标记, plus alias 分裂和失败邮箱复用控制.
+- 动态 Gmail 接码: 支持 SMSBower Gmail 和 Emailnator Gmail. SMSBower 模式可查看余额和本地花费, 可配置服务码, 域名, 最高价格和 Gmail fission 子任务.
+- K12 workspace 流程: 支持 request/accept 两种动作, 支持多个 workspace 顺序执行. 单个邮箱登录一次后可逐个完成 K12, Sub2API 入库和 JSON 写出.
+- Sub2API 入库: 支持 OAuth 入库和 noRT 直入模式, 可配置多分组绑定, 代理/IP 管理字段, 账号优先级和入库并发.
+- access token 维护: 支持任务级和邮箱级 AT 测活, 批量测活, 一键筛选失活任务, 复制 AT, 401 失活后创建修复任务.
+- 自动补号: 支持按 Sub2API 分组统计正常账号数, 低于阈值时自动创建补号任务, 支持手动触发, 定时检测, 深度测活和补号历史日志.
+- JSON 写出: 支持 SUB2API 和 CPA 两类账号 JSON 格式, 可配置输出目录. 即使不执行 Sub2API 入库, 也可以按任务结果写出账号 JSON.
+- 数据迁移: 支持导出/导入本地配置, 邮箱池, 任务和 token 数据包. 导入前会自动备份当前数据.
+- 任务管理: 支持批量启动, 取消, 删除, 重试, 清理失败任务, 分页查看, 日志弹窗, 限流冷却和失败后重试闭环.
+
+## 核心能力详解
+
+### 邮箱池与接码
+
+邮箱可以从固定邮箱池导入, 也可以使用动态 Gmail 模式临时生成. 固定邮箱池适合已有邮箱资源的场景, 动态 Gmail 适合不想长期维护邮箱池的场景. 手动接码模式只要求导入邮箱, 任务等待验证码时在日志弹窗里填写 6 位验证码.
+
+### 多 workspace K12 流程
+
+`workspaceIds` 支持一行一个或逗号分隔. 多个 workspace 时, 系统会尽量复用同一次登录上下文, 依次执行加入/切换, 入库和 JSON 写出, 避免每个 workspace 都重复登录.
+
+### Sub2API 和 noRT
+
+默认模式会走 Sub2API OAuth 入库. noRT 直入模式会跳过 Sub2API OAuth 链路, 在注册/登录并切到 K12 后, 用 K12 上下文 AT 创建或更新 noRT 账号. 分组字段支持多个分组, 适合同时投放到多个 Sub2API 分组.
+
+### AT 测活与修复
+
+任务列表和邮箱池都可以发起 AT 测活. 当账号失活或接口返回 401 时, 可以创建 AT 修复任务, 重新走邮箱接码登录并更新对应 Sub2API 账号. 如果 Sub2API 中没有对应账号, 修复流程会按当前配置创建新账号.
+
+### 自动补号
+
+自动补号会定时检查目标 Sub2API 分组的正常账号数量. 当正常账号数低于预警线时, 系统从空闲邮箱池创建补号任务. 开启深度测活后, 会对账号执行真实请求, 只有真实可用的账号才计入正常数量.
+
+### 动态 Gmail 和 fission
+
+SMSBower Gmail 模式可以租用 Gmail 接码, 成功后可按配置创建 `+alias` 子任务. 子任务会逐个执行, 用来降低验证码串号风险. Emailnator 模式支持 plusGmail, googleMail, dotGmail 和 domain 等生成类型.
+
+### 数据备份与任务恢复
+
+控制台可以导出本地数据包, 覆盖配置, 邮箱池, 任务和 token. 导入数据包前会自动备份当前数据到 `data/backups/`. 服务重启后, 未完成任务会被标记为失败或保留队列状态, 便于继续重试和排查.
 
 ## 架构组成
 
@@ -435,13 +467,13 @@ cp codex_register/config.example.json codex_register/config.json
 
 ## 任务流程
 
-1. 打开 Web 控制台.
-2. 在 Settings 中填写本地配置, 保存后确认代理, workspace, Sub2API 和接码配置符合当前任务.
-3. 导入邮箱池, 或启用动态 Gmail 接码.
-4. 设置任务数量, 并发, K12 workspace 流程, Sub2API/noRT, JSON 写出选项.
-5. 启动任务, 在任务列表查看状态, 日志, access token 摘要和写出结果.
-6. 对失败任务按日志定位原因后重试, 或降低并发后重新执行.
-7. 如需迁移本地状态, 使用数据导入/导出功能, 不要通过 Git 保存运行数据.
+1. 打开 Web 控制台, 先在 Settings 中保存代理, workspace, Sub2API, 接码和 JSON 写出配置.
+2. 选择邮箱来源: 导入固定邮箱池, 选择手动接码, 或开启 SMSBower/Emailnator 动态 Gmail.
+3. 配置 K12 workspace 列表, request/accept 动作, 并发, 是否执行 Sub2API 入库, 是否启用 noRT 和 JSON 写出.
+4. 如果需要保持 Sub2API 分组库存, 开启自动补号, 设置目标分组, 预警线, 补号数量和深度测活.
+5. 启动任务后, 在任务列表查看状态, K12 结果, Sub2API 账号, AT 摘要, JSON 文件和日志.
+6. 对失败或失活账号, 先执行 AT 测活, 再按结果选择修复 AT, 重试任务, 清理失败任务或降低并发后重新运行.
+7. 迁移或备份本地状态时, 使用导出/导入数据功能. 不要通过 Git 保存运行数据.
 
 ## 敏感文件边界
 
